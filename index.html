@@ -6,10 +6,24 @@
     <title>Projectile Motion Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script>
+        MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']],
+            displayMath: [['$$', '$$'], ['\\[', '\\]']]
+          },
+          svg: {
+            fontCache: 'global'
+          }
+        };
+    </script>
+    <script type="text/javascript" id="MathJax-script" async
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js">
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            overscroll-behavior: none; /* Prevents pull-to-refresh on mobile */
+            overscroll-behavior: none; 
         }
         .slider-container {
             display: flex;
@@ -17,24 +31,24 @@
             margin-bottom: 1rem;
         }
         .slider-container label {
-            min-width: 150px; /* Ensure labels have enough space */
+            min-width: 150px; 
             margin-right: 10px;
         }
         .slider-container input[type="range"] {
             flex-grow: 1;
         }
         .slider-container span {
-            min-width: 60px; /* Space for value display */
+            min-width: 60px; 
             text-align: right;
             margin-left: 10px;
         }
         canvas {
-            background-color: #e0f2fe; /* Light sky blue */
+            background-color: #e0f2fe; 
             border-radius: 0.5rem;
-            display: block; /* Remove extra space below canvas */
+            display: block; 
         }
         .info-table th, .info-table td {
-            border: 1px solid #cbd5e1; /* cool-gray-300 */
+            border: 1px solid #cbd5e1; 
             padding: 0.5rem;
             text-align: left;
         }
@@ -44,9 +58,7 @@
         }
         .equations-section dd {
             margin-left: 1rem;
-            font-family: 'Courier New', Courier, monospace; /* Monospace for equations */
         }
-        /* Custom button styling for better visual appeal */
         .custom-btn {
             padding: 0.75rem 1.5rem;
             border-radius: 0.5rem;
@@ -63,30 +75,29 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .launch-btn {
-            background-color: #22c55e; /* green-500 */
+            background-color: #22c55e; 
             color: white;
         }
         .launch-btn:hover {
-            background-color: #16a34a; /* green-600 */
+            background-color: #16a34a; 
         }
         .reset-btn {
-            background-color: #ef4444; /* red-500 */
+            background-color: #ef4444; 
             color: white;
         }
         .reset-btn:hover {
-            background-color: #dc2626; /* red-600 */
+            background-color: #dc2626; 
         }
         .clear-btn {
-            background-color: #f97316; /* orange-500 */
+            background-color: #f97316; 
             color: white;
         }
         .clear-btn:hover {
-            background-color: #ea580c; /* orange-600 */
+            background-color: #ea580c; 
         }
-        /* Ensure full width for canvas container on smaller screens */
         .canvas-container {
             width: 100%;
-            max-width: 800px; /* Max width for larger screens */
+            max-width: 800px; 
             margin-left: auto;
             margin-right: auto;
         }
@@ -155,8 +166,8 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr><td>Initial Horizontal Velocity (v₀ₓ)</td><td id="v0x_val">-</td></tr>
-                            <tr><td>Initial Vertical Velocity (v₀ᵧ)</td><td id="v0y_val">-</td></tr>
+                            <tr><td>Initial Horizontal Velocity ($v_{0x}$)</td><td id="v0x_val">-</td></tr>
+                            <tr><td>Initial Vertical Velocity ($v_{0y}$)</td><td id="v0y_val">-</td></tr>
                             <tr><td>Max Height (H)</td><td id="maxHeight_val">-</td></tr>
                             <tr><td>Horizontal Range (R)</td><td id="range_val">-</td></tr>
                             <tr><td>Total Time of Flight (T)</td><td id="timeOfFlight_val">-</td></tr>
@@ -231,61 +242,63 @@
         // Constants
         const g = 9.81; // m/s^2
         const FPS = 60; // Frames per second for animation
-        const TARGET_ANIM_DURATION_45_DEG = 5; // seconds
+        // Adjusted target animation duration for a 45-degree launch to speed up simulation
+        const TARGET_ANIM_DURATION_45_DEG = 2.5; // seconds (previously 5)
+        const REFERENCE_V0_FOR_TIMING = 25; // m/s, fixed reference speed for 45-deg timing base
 
         let animationFrameId = null;
         let projectile = null;
-        let trails = []; // To store points of previous trajectories
-        let currentTrail = []; // Points for the current trajectory being drawn
+        let trails = []; 
+        let currentTrail = []; 
+
+        // Variables to store calculated extents for scaling
+        let currentCalculatedRange = 150; // Default canvas width in meters
+        let currentCalculatedMaxHeight = 100; // Default canvas height in meters
+
 
         // Canvas setup
         function setupCanvas() {
             const container = canvas.parentElement;
-            // Make canvas responsive to container width, aiming for a 16:9 or similar aspect ratio
             const aspectRatio = 16 / 9; 
             canvas.width = container.clientWidth - parseInt(getComputedStyle(container).paddingLeft) - parseInt(getComputedStyle(container).paddingRight);
             canvas.height = canvas.width / aspectRatio;
-            // Max height to prevent overly tall canvas on narrow screens
             if (canvas.height > 500) canvas.height = 500; 
             
             drawGrid();
-            drawTrails(); // Redraw persistent trails
+            const scale = getOverallScale(); // Get scale based on current state
+            drawTrails(scale); // Redraw persistent trails with the correct scale
         }
 
         // Function to draw a grid on the canvas
         function drawGrid() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
-            ctx.fillStyle = "#e0f2fe"; // Light sky blue background
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            ctx.fillStyle = "#e0f2fe"; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const step = 50; // Grid line spacing in pixels
             ctx.beginPath();
-            ctx.strokeStyle = "#a5f3fc"; // Lighter blue for grid
+            ctx.strokeStyle = "#a5f3fc"; 
             ctx.lineWidth = 0.5;
 
-            // Vertical lines
             for (let x = 0; x <= canvas.width; x += step) {
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, canvas.height);
             }
-            // Horizontal lines
             for (let y = 0; y <= canvas.height; y += step) {
                 ctx.moveTo(0, y);
                 ctx.lineTo(canvas.width, y);
             }
             ctx.stroke();
 
-            // Draw axis lines (bolder)
             ctx.beginPath();
-            ctx.strokeStyle = "#0ea5e9"; // Sky-500
+            ctx.strokeStyle = "#0ea5e9"; 
             ctx.lineWidth = 1;
-            ctx.moveTo(0, canvas.height -1); // X-axis (bottom)
+            ctx.moveTo(0, canvas.height -1); 
             ctx.lineTo(canvas.width, canvas.height -1);
-            ctx.moveTo(1, 0); // Y-axis (left)
+            ctx.moveTo(1, 0); 
             ctx.lineTo(1, canvas.height);
             ctx.stroke();
         }
-
 
         // Update slider value displays
         initialSpeedSlider.addEventListener('input', () => {
@@ -297,25 +310,26 @@
 
         // Launch button event listener
         launchButton.addEventListener('click', () => {
-            if (animationFrameId) { // If animation is running, stop it
+            if (animationFrameId) { 
                 cancelAnimationFrame(animationFrameId);
                 animationFrameId = null;
             }
             if (currentTrail.length > 0 && showPreviousTrailsCheckbox.checked) {
-                trails.push([...currentTrail]); // Save the last completed trail
+                trails.push([...currentTrail]); 
             }
-            currentTrail = []; // Reset current trail for the new launch
+            currentTrail = []; 
 
             const v0 = parseFloat(initialSpeedSlider.value);
             const angleDeg = parseFloat(launchAngleSlider.value);
             const angleRad = angleDeg * (Math.PI / 180);
 
-            if (v0 === 0) { // Handle zero initial speed
-                alert("Initial speed cannot be zero for a launch!");
+            if (v0 === 0) { 
+                showModal("Launch Error", "Initial speed cannot be zero for a launch!");
                 updateSummaryTable(0, 0, 0, 0, 0);
                 resetLiveData();
                 drawGrid();
-                drawTrails();
+                const scale = getOverallScale();
+                drawTrails(scale);
                 return;
             }
             
@@ -323,103 +337,90 @@
             const v0x = v0 * Math.cos(angleRad);
             const v0y = v0 * Math.sin(angleRad);
             
-            const timeOfFlight = (2 * v0y) / g;
-            const maxHeight = (v0y * v0y) / (2 * g);
-            const range = v0x * timeOfFlight;
+            const timeOfFlight_current_launch = (v0y > 0) ? (2 * v0y) / g : 0; // Actual time of flight for this launch
+            const maxHeight_current_launch = (v0y > 0) ? (v0y * v0y) / (2 * g) : 0;
+            const range_current_launch = v0x * timeOfFlight_current_launch;
 
-            // Update summary table
-            updateSummaryTable(v0x, v0y, maxHeight, range, timeOfFlight);
+            // Update global calculated extents for scaling
+            currentCalculatedRange = range_current_launch;
+            currentCalculatedMaxHeight = maxHeight_current_launch;
 
-            // Projectile object
+            updateSummaryTable(v0x, v0y, maxHeight_current_launch, range_current_launch, timeOfFlight_current_launch);
+
             projectile = {
-                x: 0,
-                y: 0,
-                radius: 5,
-                color: `hsl(${Math.random() * 360}, 70%, 50%)`, // Random vibrant color
-                v0x: v0x,
-                v0y: v0y,
-                path: [] // Store points for the current trajectory
+                x: 0, y: 0, radius: 5,
+                color: `hsl(${Math.random() * 360}, 70%, 50%)`,
+                v0x: v0x, v0y: v0y, path: []
             };
 
-            // Animation timing logic
-            // 1. Calculate flight time for a 45-degree launch with current v0
-            const v0y_ref45 = v0 * Math.sin(45 * Math.PI / 180);
-            const timeOfFlight_ref45 = (v0y_ref45 > 0) ? (2 * v0y_ref45) / g : 0.0001; // Avoid division by zero
+            // Corrected Animation timing logic
+            const v0y_fixed_ref45 = REFERENCE_V0_FOR_TIMING * Math.sin(45 * Math.PI / 180);
+            const timeOfFlight_fixed_ref45 = (v0y_fixed_ref45 > 0) ? (2 * v0y_fixed_ref45) / g : 0.0001; // Avoid division by zero
 
-            // 2. Determine animation duration for the current launch
-            // Proportional to actual flight time, anchored by 5s for 45-deg
             let animationDurationCurrentLaunch;
-            if (timeOfFlight_ref45 > 0) {
-                 animationDurationCurrentLaunch = TARGET_ANIM_DURATION_45_DEG * (timeOfFlight / timeOfFlight_ref45);
-            } else { // If v0 is 0, ref45 time is 0. Fallback for safety, though v0=0 is handled.
-                animationDurationCurrentLaunch = (timeOfFlight > 0.1) ? 1 : 0.1; // Short animation for tiny flights
+            if (timeOfFlight_fixed_ref45 > 0) {
+                 animationDurationCurrentLaunch = TARGET_ANIM_DURATION_45_DEG * (timeOfFlight_current_launch / timeOfFlight_fixed_ref45);
+            } else { 
+                animationDurationCurrentLaunch = (timeOfFlight_current_launch > 0.1) ? 1 : 0.1; 
             }
-            // Ensure a minimum animation duration if timeOfFlight is very small but non-zero
-            if (timeOfFlight > 0 && animationDurationCurrentLaunch < 0.2) {
-                animationDurationCurrentLaunch = 0.2;
+            
+            if (timeOfFlight_current_launch > 0 && animationDurationCurrentLaunch < 0.2) {
+                animationDurationCurrentLaunch = 0.2; // Ensure a minimum animation time for very short flights
             }
-             if (timeOfFlight <= 0) { // If no flight time (e.g. angle 0 and on ground)
-                animationDurationCurrentLaunch = 0.1; // Very short animation to draw a dot
+            if (timeOfFlight_current_launch <= 0) { 
+                animationDurationCurrentLaunch = 0.1; // Very short animation for no-flight scenarios
             }
-
 
             let startTime = null;
             let physicsTime = 0;
 
             function animate(timestamp) {
                 if (!startTime) startTime = timestamp;
-                const elapsedTimeOnScreen = (timestamp - startTime) / 1000; // seconds
+                const elapsedTimeOnScreen = (timestamp - startTime) / 1000; 
 
-                // Calculate how much physics time should have passed
-                // This maps the screen animation duration to the actual physics time of flight
                 if (animationDurationCurrentLaunch > 0) {
-                    physicsTime = (elapsedTimeOnScreen / animationDurationCurrentLaunch) * timeOfFlight;
+                    physicsTime = (elapsedTimeOnScreen / animationDurationCurrentLaunch) * timeOfFlight_current_launch;
                 } else {
-                    physicsTime = timeOfFlight; // If animation duration is zero, jump to end
+                    physicsTime = timeOfFlight_current_launch; 
                 }
                 
-                if (physicsTime > timeOfFlight) physicsTime = timeOfFlight;
+                if (physicsTime > timeOfFlight_current_launch) physicsTime = timeOfFlight_current_launch;
 
-                // Calculate projectile position based on physicsTime
                 projectile.x = projectile.v0x * physicsTime;
                 const currentPhysicsY = (projectile.v0y * physicsTime) - (0.5 * g * physicsTime * physicsTime);
                 
-                // Stop if projectile hits ground (or goes below)
-                if (currentPhysicsY < 0 && physicsTime > 0.01) { // physicsTime check to avoid premature stop at t=0
-                    physicsTime = timeOfFlight; // Ensure it lands exactly at the calculated range
+                if (currentPhysicsY < 0 && physicsTime > 0.01) { 
+                    physicsTime = timeOfFlight_current_launch; 
                     projectile.x = projectile.v0x * physicsTime;
-                    projectile.y = 0; // Snap to ground
+                    projectile.y = 0; 
                     projectile.path.push({ x: projectile.x, y: 0 });
                     currentTrail.push({ x: projectile.x, y: 0 });
                     drawScene();
                     updateLiveData(physicsTime, projectile.x, 0);
-                    animationFrameId = null; // End animation
+                    animationFrameId = null; 
                     launchButton.disabled = false;
                     return;
                 }
                 projectile.y = currentPhysicsY;
 
-                // Store current position for drawing the trail
                 projectile.path.push({ x: projectile.x, y: projectile.y });
                 currentTrail.push({ x: projectile.x, y: projectile.y });
 
                 drawScene();
                 updateLiveData(physicsTime, projectile.x, projectile.y);
                 
-                // Continue animation if physics time is less than total flight time
-                if (physicsTime < timeOfFlight) {
+                if (physicsTime < timeOfFlight_current_launch) {
                     animationFrameId = requestAnimationFrame(animate);
                 } else {
-                    // Ensure final point is exactly at landing
-                    if (projectile.y > 0) { // If somehow it didn't reach y=0
-                         projectile.x = projectile.v0x * timeOfFlight;
+                    if (projectile.y > 0) { 
+                         projectile.x = projectile.v0x * timeOfFlight_current_launch;
                          projectile.y = 0;
                          projectile.path.push({ x: projectile.x, y: 0 });
                          currentTrail.push({ x: projectile.x, y: 0 });
-                         drawScene();
-                         updateLiveData(timeOfFlight, projectile.x, 0);
+                         drawScene(); // Final draw call
+                         updateLiveData(timeOfFlight_current_launch, projectile.x, 0);
                     }
-                    animationFrameId = null; // End animation
+                    animationFrameId = null; 
                     launchButton.disabled = false;
                 }
             }
@@ -435,8 +436,10 @@
             }
             projectile = null;
             currentTrail = [];
-            trails = []; // Clear all trails on full reset
-            drawGrid(); // Redraw grid, clearing everything
+            trails = []; 
+            currentCalculatedRange = 150; // Reset calculated extents to default
+            currentCalculatedMaxHeight = 100;
+            drawGrid(); 
             resetSummaryTable();
             resetLiveData();
             initialSpeedSlider.value = "25";
@@ -446,33 +449,52 @@
             launchButton.disabled = false;
         });
         
-        // Clear Trails button event listener
         clearTrailsButton.addEventListener('click', () => {
-            trails = []; // Clear only the stored historical trails
-            // Keep the current simulation if it's running or just finished
-            drawScene(); // Redraw, which will only draw the grid and current projectile/trail
+            trails = []; 
+            drawScene(); 
         });
 
+        // Function to determine the overall scale for drawing
+        function getOverallScale() {
+            let maxX = Math.max(150, currentCalculatedRange); 
+            let maxY = Math.max(100, currentCalculatedMaxHeight);
+
+            if (showPreviousTrailsCheckbox.checked) {
+                trails.forEach(trail => {
+                    trail.forEach(p => {
+                        if (p.x > maxX) maxX = p.x;
+                        if (p.y > maxY) maxY = p.y;
+                    });
+                });
+            }
+            
+            if (projectile && projectile.path.length > 0) {
+                projectile.path.forEach(p => {
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.y > maxY) maxY = p.y;
+                });
+            }
+
+            maxX = Math.max(1, maxX * 1.1); 
+            maxY = Math.max(1, maxY * 1.2); 
+
+            const pixelsPerMeterX = canvas.width / maxX;
+            const pixelsPerMeterY = canvas.height / maxY;
+                                    
+            return Math.min(pixelsPerMeterX, pixelsPerMeterY);
+        }
 
         // Function to draw the current scene (grid, trails, projectile)
         function drawScene() {
-            drawGrid(); // Clears and redraws grid
-            drawTrails(); // Draw historical trails first
+            const scale = getOverallScale(); 
+            drawGrid(); 
+            drawTrails(scale); 
             
-            // Draw current projectile's path as it's being animated
             if (projectile && projectile.path.length > 0) {
                 ctx.beginPath();
-                ctx.strokeStyle = projectile.color; // Use projectile's color for its fresh trail
+                ctx.strokeStyle = projectile.color; 
                 ctx.lineWidth = 2;
-                // Scaling: Determine max range and height for scaling, or use fixed scale
-                // For simplicity, let's use a fixed pixel per meter scale for now.
-                // This might need adjustment based on typical ranges.
-                const pixelsPerMeterX = canvas.width / (parseFloat(rangeVal.textContent) > 0 ? Math.max(150, parseFloat(rangeVal.textContent) * 1.1) : 150) ; // Scale based on max range or a default
-                const pixelsPerMeterY = canvas.height / (parseFloat(maxHeightVal.textContent) > 0 ? Math.max(100, parseFloat(maxHeightVal.textContent) * 1.2) : 100);
                 
-                // Use the smaller scale to ensure everything fits
-                const scale = Math.min(pixelsPerMeterX, pixelsPerMeterY);
-
                 const firstPoint = projectile.path[0];
                 ctx.moveTo(firstPoint.x * scale, canvas.height - (firstPoint.y * scale));
 
@@ -482,7 +504,6 @@
                 }
                 ctx.stroke();
 
-                // Draw the projectile itself at the last point of its current path
                 const lastPoint = projectile.path[projectile.path.length - 1];
                 ctx.beginPath();
                 ctx.arc(lastPoint.x * scale, canvas.height - (lastPoint.y * scale), projectile.radius, 0, Math.PI * 2);
@@ -491,24 +512,18 @@
             }
         }
         
-        // Function to draw stored trails
-        function drawTrails() {
+        // Function to draw stored trails, now accepts scale as a parameter
+        function drawTrails(scale) {
             if (!showPreviousTrailsCheckbox.checked) return;
-
-            const pixelsPerMeterX = canvas.width / (parseFloat(rangeVal.textContent) > 0 ? Math.max(150, parseFloat(rangeVal.textContent) * 1.1) : 150) ;
-            const pixelsPerMeterY = canvas.height / (parseFloat(maxHeightVal.textContent) > 0 ? Math.max(100, parseFloat(maxHeightVal.textContent) * 1.2) : 100);
-            const scale = Math.min(pixelsPerMeterX, pixelsPerMeterY);
 
             trails.forEach((trail, index) => {
                 if (trail.length === 0) return;
                 ctx.beginPath();
-                // Make older trails more transparent or a different color
-                const alpha = 0.2 + 0.8 * (index / trails.length); // Fade older trails more
-                ctx.strokeStyle = `rgba(100, 100, 200, ${alpha * 0.5})`; // Faded blue for old trails
+                const alpha = 0.2 + 0.6 * (index / Math.max(1, trails.length -1)); 
+                ctx.strokeStyle = `rgba(100, 100, 200, ${alpha * 0.7})`; 
                 ctx.lineWidth = 1.5;
                 
                 const firstPoint = trail[0];
-                // Check if firstPoint and its properties are defined
                 if (firstPoint && typeof firstPoint.x !== 'undefined' && typeof firstPoint.y !== 'undefined') {
                     ctx.moveTo(firstPoint.x * scale, canvas.height - (firstPoint.y * scale));
                     for (let i = 1; i < trail.length; i++) {
@@ -522,45 +537,76 @@
             });
         }
 
-
-        // Update summary table
         function updateSummaryTable(v0x, v0y, maxHeight, range, timeOfFlight) {
-            v0xVal.textContent = `${v0x.toFixed(2)} m/s`;
-            v0yVal.textContent = `${v0y.toFixed(2)} m/s`;
+            v0xVal.innerHTML = `${v0x.toFixed(2)} m/s`; 
+            v0yVal.innerHTML = `${v0y.toFixed(2)} m/s`; 
             maxHeightVal.textContent = `${maxHeight.toFixed(2)} m`;
             rangeVal.textContent = `${range.toFixed(2)} m`;
             timeOfFlightVal.textContent = `${timeOfFlight.toFixed(2)} s`;
+            if (typeof MathJax !== "undefined" && MathJax.typeset) { 
+                MathJax.typesetPromise([v0xVal.parentElement.parentElement, v0yVal.parentElement.parentElement]);
+            }
         }
         
-        // Reset summary table to placeholders
         function resetSummaryTable() {
-            v0xVal.textContent = '-';
-            v0yVal.textContent = '-';
+            v0xVal.innerHTML = '-'; 
+            v0yVal.innerHTML = '-'; 
             maxHeightVal.textContent = '-';
             rangeVal.textContent = '-';
             timeOfFlightVal.textContent = '-';
         }
 
-        // Update live data display
         function updateLiveData(time, x, y) {
             currentTimeDisplay.textContent = time.toFixed(2);
             currentXDisplay.textContent = x.toFixed(2);
             currentYDisplay.textContent = y.toFixed(2);
         }
         
-        // Reset live data display
         function resetLiveData() {
             currentTimeDisplay.textContent = '0.00';
             currentXDisplay.textContent = '0.00';
             currentYDisplay.textContent = '0.00';
         }
+        
+        function showModal(title, message) {
+            let modal = document.getElementById('infoModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'infoModal';
+                modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50';
+                modal.innerHTML = `
+                    <div class="relative p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
+                        <div class="mt-3 text-center">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900" id="modalTitle">${title}</h3>
+                            <div class="mt-2 px-7 py-3">
+                                <p class="text-sm text-gray-500" id="modalMessage">${message}</p>
+                            </div>
+                            <div class="items-center px-4 py-3">
+                                <button id="closeModalButton" class="px-4 py-2 bg-sky-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-sky-300">
+                                    OK
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                document.getElementById('closeModalButton').onclick = () => {
+                    modal.style.display = 'none';
+                };
+            }
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            modal.style.display = 'flex';
+        }
 
-        // Initial setup
         window.addEventListener('resize', setupCanvas);
         window.onload = () => {
             setupCanvas();
             resetSummaryTable();
             resetLiveData();
+            if (typeof MathJax !== "undefined" && MathJax.typeset) {
+                MathJax.typesetPromise();
+            }
         };
 
     </script>
